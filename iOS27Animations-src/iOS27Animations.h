@@ -24,8 +24,9 @@ void IOS27AnimateBannerIn(UIView *view);     // 通知玻璃滑入
 // ---- 应用开合 zoom 转场（Liquid Glass）----
 @interface IOS27ZoomOverlay : NSObject
 + (instancetype)shared;
-- (void)appWillOpen;        // App 即将打开：桌面缩向中心圆角消失
-- (void)appDidReturnHome;   // 回到桌面：玻璃从一点放大展开
+- (void)appWillOpen;                       // App 即将打开：桌面缩向中心圆角消失
+- (void)appDidReturnHome;                  // 回到桌面：玻璃从一点放大展开
+- (void)zoomOutToIconView:(UIView *)iconView;  // 点击图标：整屏缩向该图标（真 iOS 26 zoom）
 @end
 
 // ---- 灵动岛（液态玻璃胶囊）----

@@ -60,7 +60,7 @@ static UIWindow *IOS27ActiveWindow(void) {
 #pragma mark - 图标：液态回弹 + 玻璃高光扫过
 
 void IOS27BounceLayer(CALayer *layer) {
-    // 1) 液态回弹（幅度收敛、easeOut 收尾，接近 iOS 26 的弹性手感）
+    // 液态回弹（幅度收敛、easeOut 收尾，接近 iOS 26 的弹性手感）
     CAKeyframeAnimation *pop = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
     pop.values    = @[@1.0, @1.075, @0.985, @1.0];
     pop.keyTimes  = @[@0.0, @0.38, @0.72, @1.0];
@@ -71,41 +71,6 @@ void IOS27BounceLayer(CALayer *layer) {
         [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]
     ];
     [layer addAnimation:pop forKey:@"ios26pop"];
-
-    // 2) 玻璃高光斜扫（Liquid Glass 特征）
-    if (layer.bounds.size.width >= 24 && layer.bounds.size.height >= 24) {
-        CAGradientLayer *shine = [CAGradientLayer layer];
-        shine.frame = layer.bounds;
-        shine.colors = @[
-            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.45].CGColor,
-            (id)[UIColor colorWithWhite:1.0 alpha:0.0].CGColor
-        ];
-        shine.startPoint = CGPointMake(0.0, 0.15);
-        shine.endPoint   = CGPointMake(1.0, 1.15);
-        shine.locations  = @[@0.0, @0.5, @1.0];
-        shine.opacity    = 0.0;
-        [layer addSublayer:shine];
-
-        CABasicAnimation *sweep = [CABasicAnimation animationWithKeyPath:@"transform.translation.x"];
-        sweep.fromValue = @(-layer.bounds.size.width * 1.6);
-        sweep.toValue   = @(layer.bounds.size.width * 1.6);
-        sweep.duration  = 0.55;
-        sweep.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
-        [shine addAnimation:sweep forKey:@"ios26sweep"];
-
-        CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
-        fade.fromValue = @0.0;
-        fade.toValue   = @1.0;
-        fade.autoreverses = YES;
-        fade.duration  = 0.55;
-        [shine addAnimation:fade forKey:@"ios26shineFade"];
-
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.7 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            [shine removeFromSuperlayer];
-        });
-    }
 }
 
 #pragma mark - 锁屏：玻璃浮起
@@ -212,6 +177,53 @@ void IOS27AnimateBannerIn(UIView *view) {
                         options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState
                      animations:^{
         ov.transform = CGAffineTransformMakeScale(0.20, 0.20);
+        ov.alpha = 0.0;
+    } completion:^(BOOL finished) {
+        [ov.layer removeAllAnimations];
+        [ov removeFromSuperview];
+        if (_overlay == ov) _overlay = nil;
+    }];
+}
+
+// 点击图标启动 App：整屏缩向该图标的真实位置 + 圆角化 + 淡出（真正的 iOS 26 zoom-out）
+- (void)zoomOutToIconView:(UIView *)iconView {
+    if (!IOS27Enabled() || !IOS27AppTransition()) return;
+    _appIsOpen = YES;
+
+    UIWindow *host = IOS27ActiveWindow();
+    if (!host) return;
+    if (_overlay) { [_overlay removeFromSuperview]; _overlay = nil; }
+
+    UIView *ov = [self makeOverlayOnHost:host];
+    ov.alpha = 1.0;
+    ov.transform = CGAffineTransformIdentity;
+    ov.layer.cornerRadius = 0.0;
+    [host addSubview:ov];
+    _overlay = ov;
+
+    CGRect iconFrame = [iconView convertRect:iconView.bounds toView:host];
+    CGFloat sx = host.bounds.size.width  > 0 ? iconFrame.size.width  / host.bounds.size.width  : 0.3;
+    CGFloat sy = host.bounds.size.height > 0 ? iconFrame.size.height / host.bounds.size.height : 0.3;
+    CGFloat targetRadius = MAX(8.0, iconFrame.size.width / 5.0);
+    CGPoint ic = CGPointMake(CGRectGetMidX(iconFrame), CGRectGetMidY(iconFrame));
+    CGPoint hc = CGPointMake(host.bounds.size.width / 2.0, host.bounds.size.height / 2.0);
+
+    CGAffineTransform t = CGAffineTransformMakeTranslation(ic.x - hc.x, ic.y - hc.y);
+    t = CGAffineTransformScale(t, sx, sy);
+
+    CABasicAnimation *cr = [CABasicAnimation animationWithKeyPath:@"cornerRadius"];
+    cr.fromValue = @0.0;
+    cr.toValue   = @(targetRadius);
+    cr.duration  = 0.5;
+    cr.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+    ov.layer.cornerRadius = targetRadius;
+    [ov.layer addAnimation:cr forKey:@"ios26cr"];
+
+    [UIView animateWithDuration:0.5 delay:0
+         usingSpringWithDamping:0.9 initialSpringVelocity:0.1
+                        options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState
+                     animations:^{
+        ov.transform = t;
         ov.alpha = 0.0;
     } completion:^(BOOL finished) {
         [ov.layer removeAllAnimations];
