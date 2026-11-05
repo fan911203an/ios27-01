@@ -1,8 +1,8 @@
 Package: com.ios27.animations
 Name: iOS 26 动画
-Version: 1.0.9
+Version: 1.0.10
 Architecture: iphoneos-arm64e
-Description: 模拟 iOS 26 Liquid Glass 动效——应用开合 zoom 转场 / 灵动岛玻璃胶囊 / 锁屏通知浮起 / 桌面图标液态回弹
+Description: 模拟 iOS 26 Liquid Glass 动效——桌面图标大圆角与液态回弹 / 文件夹柔和淡入 / 灵动岛玻璃胶囊 / 锁屏通知浮起（App 开合转场请配合 26Anim 插件）
 Author: fan911203an
 Maintainer: fan911203an
 Section: Tweaks

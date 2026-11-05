@@ -1,22 +1,12 @@
 //
 //  AnimHome.x — 桌面与图标动效
-//  点击图标：整屏缩向该图标（真 iOS 26 zoom） + 图标液态回弹 + 文件夹柔和淡入
+//  图标大圆角（iOS 26 squircle） + 液态回弹 + 文件夹柔和淡入
+//  注：图标点击的整屏 zoom 已由 26Anim 负责，本文件不再 hook 启动流程
 //
 #import "iOS27Animations.h"
 
 @interface SBIconImageView : UIView @end
-@interface SBIconView : UIView
-- (void)_launchFromLocation:(id)location context:(id)context;
-@end
 @interface SBFolderController : UIViewController @end
-
-// 点击图标启动 App：拿到真实图标位置，整屏缩向它（iOS 26 zoom-out）
-%hook SBIconView
-- (void)_launchFromLocation:(id)location context:(id)context {
-    [[IOS27ZoomOverlay shared] zoomOutToIconView:self];
-    %orig;
-}
-%end
 
 // 图标：iOS 26 大圆角（continuous squircle） + 液态回弹
 %hook SBIconImageView

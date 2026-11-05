@@ -29,7 +29,6 @@ static NSDictionary *IOS27Prefs(void) {
     NSMutableDictionary *d = [NSMutableDictionary dictionaryWithDictionary:
                               [NSDictionary dictionaryWithContentsOfFile:IOS27PrefsPath()] ?: @{}];
     if (!d[@"enabled"])       d[@"enabled"]       = @YES;
-    if (!d[@"appTransition"]) d[@"appTransition"] = @YES;
     if (!d[@"island"])        d[@"island"]        = @YES;
     if (!d[@"lockscreen"])    d[@"lockscreen"]    = @YES;
     if (!d[@"home"])          d[@"home"]          = @YES;
@@ -37,7 +36,6 @@ static NSDictionary *IOS27Prefs(void) {
 }
 
 BOOL IOS27Enabled(void)       { return [IOS27Prefs()[@"enabled"] boolValue]; }
-BOOL IOS27AppTransition(void) { return [IOS27Prefs()[@"appTransition"] boolValue]; }
 BOOL IOS27IslandEnabled(void) { return [IOS27Prefs()[@"island"] boolValue]; }
 BOOL IOS27Lockscreen(void)    { return [IOS27Prefs()[@"lockscreen"] boolValue]; }
 BOOL IOS27Home(void)          { return [IOS27Prefs()[@"home"] boolValue]; }
@@ -104,180 +102,6 @@ void IOS27AnimateBannerIn(UIView *view) {
     } completion:nil];
 }
 
-#pragma mark - 应用开合 zoom 转场
-
-@interface IOS27ZoomOverlay () {
-    UIView *_overlay;
-    BOOL _appIsOpen;
-}
-@end
-
-@implementation IOS27ZoomOverlay
-
-+ (instancetype)shared {
-    static IOS27ZoomOverlay *instance;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{ instance = [[self alloc] init]; });
-    return instance;
-}
-
-- (UIView *)topWindowView {
-    return IOS27ActiveWindow();
-}
-
-- (UIImage *)snapshotOfView:(UIView *)host {
-    UIGraphicsBeginImageContextWithOptions(host.bounds.size, NO, 0);
-    [host drawViewHierarchyInRect:host.bounds afterScreenUpdates:NO];
-    UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    return img;
-}
-
-- (UIView *)makeOverlayOnHost:(UIView *)host {
-    UIView *ov = [[UIView alloc] initWithFrame:host.bounds];
-    ov.backgroundColor = [UIColor clearColor];
-    ov.userInteractionEnabled = NO;
-    ov.layer.masksToBounds = YES;
-    UIImage *img = [self snapshotOfView:host];
-    if (img) {
-        UIImageView *iv = [[UIImageView alloc] initWithFrame:host.bounds];
-        iv.image = img;
-        iv.contentMode = UIViewContentModeScaleAspectFill;
-        [ov addSubview:iv];
-    }
-    return ov;
-}
-
-// App 即将打开：整个桌面画面缩向中心 + 圆角逐渐变大 + 淡出（iOS 26 的 zoom-out 观感）
-- (void)appWillOpen {
-    if (!IOS27Enabled() || !IOS27AppTransition()) return;
-    _appIsOpen = YES;
-
-    UIView *host = [self topWindowView];
-    if (!host) return;
-    if (_overlay) { [_overlay removeFromSuperview]; _overlay = nil; }
-
-    UIView *ov = [self makeOverlayOnHost:host];
-    ov.alpha = 1.0;
-    ov.transform = CGAffineTransformIdentity;
-    ov.layer.cornerRadius = 0.0;
-    [host addSubview:ov];
-    _overlay = ov;
-
-    CABasicAnimation *cr = [CABasicAnimation animationWithKeyPath:@"cornerRadius"];
-    cr.fromValue = @0.0;
-    cr.toValue   = @34.0;
-    cr.duration  = 0.5;
-    cr.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
-    ov.layer.cornerRadius = 34.0;
-    [ov.layer addAnimation:cr forKey:@"ios26cr"];
-
-    [UIView animateWithDuration:0.5 delay:0
-         usingSpringWithDamping:0.9 initialSpringVelocity:0.08
-                        options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState
-                     animations:^{
-        ov.transform = CGAffineTransformMakeScale(0.20, 0.20);
-        ov.alpha = 0.0;
-    } completion:^(BOOL finished) {
-        [ov.layer removeAllAnimations];
-        [ov removeFromSuperview];
-        if (_overlay == ov) _overlay = nil;
-    }];
-}
-
-// 点击图标启动 App：整屏缩向该图标的真实位置 + 圆角化 + 淡出（真正的 iOS 26 zoom-out）
-- (void)zoomOutToIconView:(UIView *)iconView {
-    if (!IOS27Enabled() || !IOS27AppTransition()) return;
-    _appIsOpen = YES;
-
-    UIWindow *host = IOS27ActiveWindow();
-    if (!host) return;
-    if (_overlay) { [_overlay removeFromSuperview]; _overlay = nil; }
-
-    UIView *ov = [self makeOverlayOnHost:host];
-    ov.alpha = 1.0;
-    ov.transform = CGAffineTransformIdentity;
-    ov.layer.cornerRadius = 0.0;
-    [host addSubview:ov];
-    _overlay = ov;
-
-    CGRect iconFrame = [iconView convertRect:iconView.bounds toView:host];
-    CGFloat sx = host.bounds.size.width  > 0 ? iconFrame.size.width  / host.bounds.size.width  : 0.3;
-    CGFloat sy = host.bounds.size.height > 0 ? iconFrame.size.height / host.bounds.size.height : 0.3;
-    CGFloat targetRadius = MAX(8.0, iconFrame.size.width / 5.0);
-    CGPoint ic = CGPointMake(CGRectGetMidX(iconFrame), CGRectGetMidY(iconFrame));
-    CGPoint hc = CGPointMake(host.bounds.size.width / 2.0, host.bounds.size.height / 2.0);
-
-    CGAffineTransform t = CGAffineTransformMakeTranslation(ic.x - hc.x, ic.y - hc.y);
-    t = CGAffineTransformScale(t, sx, sy);
-
-    CABasicAnimation *cr = [CABasicAnimation animationWithKeyPath:@"cornerRadius"];
-    cr.fromValue = @0.0;
-    cr.toValue   = @(targetRadius);
-    cr.duration  = 0.5;
-    cr.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
-    ov.layer.cornerRadius = targetRadius;
-    [ov.layer addAnimation:cr forKey:@"ios26cr"];
-
-    [UIView animateWithDuration:0.5 delay:0
-         usingSpringWithDamping:0.9 initialSpringVelocity:0.1
-                        options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState
-                     animations:^{
-        ov.transform = t;
-        ov.alpha = 0.0;
-    } completion:^(BOOL finished) {
-        [ov.layer removeAllAnimations];
-        [ov removeFromSuperview];
-        if (_overlay == ov) _overlay = nil;
-    }];
-}
-
-// 回到桌面：玻璃画面从中心一点放大 + 圆角收小 + 渐显（zoom-in 观感）
-- (void)appDidReturnHome {
-    if (!_appIsOpen) return;
-    _appIsOpen = NO;
-    if (!IOS27Enabled() || !IOS27AppTransition()) return;
-
-    UIView *host = [self topWindowView];
-    if (!host) return;
-    if (_overlay) { [_overlay removeFromSuperview]; _overlay = nil; }
-
-    UIView *ov = [self makeOverlayOnHost:host];
-    ov.alpha = 0.0;
-    ov.transform = CGAffineTransformMakeScale(0.20, 0.20);
-    ov.layer.cornerRadius = 34.0;
-    [host addSubview:ov];
-    _overlay = ov;
-
-    CABasicAnimation *cr = [CABasicAnimation animationWithKeyPath:@"cornerRadius"];
-    cr.fromValue = @34.0;
-    cr.toValue   = @0.0;
-    cr.duration  = 0.52;
-    cr.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
-    ov.layer.cornerRadius = 0.0;
-    [ov.layer addAnimation:cr forKey:@"ios26cr"];
-
-    [UIView animateWithDuration:0.52 delay:0
-         usingSpringWithDamping:0.88 initialSpringVelocity:0.12
-                        options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState
-                     animations:^{
-        ov.transform = CGAffineTransformIdentity;
-        ov.alpha = 1.0;
-    } completion:^(BOOL finished) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.16 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            [UIView animateWithDuration:0.22 delay:0
-                                  options:UIViewAnimationOptionCurveEaseOut
-                             animations:^{ ov.alpha = 0.0; }
-                             completion:^(BOOL f2) {
-                [ov removeFromSuperview];
-                if (_overlay == ov) _overlay = nil;
-            }];
-        });
-    }];
-}
-
-@end
 
 #pragma mark - 灵动岛：半透明玻璃胶囊 + 高光
 

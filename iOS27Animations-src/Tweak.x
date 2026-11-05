@@ -1,17 +1,9 @@
 //
-//  Tweak.x — 入口：通知驱动应用开合 zoom 转场
+//  Tweak.x — 入口占位
+//  App 开合转场已交由 26Anim（com.ngkhoi.26anim）负责：
+//  它走 SpringBoard 官方 SBFullscreenZoomView + mesh 变形 + CADisplayLink，
+//  且与自身 zoom 叠加会打架，故本插件不再重复实现。
+//
+//  本插件只负责：图标大圆角 + 液态回弹、文件夹淡入、灵动岛玻璃胶囊、锁屏通知。
 //
 #import "iOS27Animations.h"
-
-%ctor {
-    // 打开 App 时 SpringBoard 失焦 → 桌面 zoom-out
-    [[NSNotificationCenter defaultCenter] addObserver:[IOS27ZoomOverlay shared]
-                                             selector:@selector(appWillOpen)
-                                                 name:UIApplicationWillResignActiveNotification
-                                               object:nil];
-    // 回到桌面时 SpringBoard 获焦 → 桌面 zoom-in
-    [[NSNotificationCenter defaultCenter] addObserver:[IOS27ZoomOverlay shared]
-                                             selector:@selector(appDidReturnHome)
-                                                 name:UIApplicationDidBecomeActiveNotification
-                                               object:nil];
-}
